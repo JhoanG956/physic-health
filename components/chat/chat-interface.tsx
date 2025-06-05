@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation"
 import { ChatInput } from "./chat-input"
 import { ChatMessages } from "./chat-messages"
 import { PromptEditor } from "./prompt-editor"
-import { ConversationHistory } from "./conversation-history"
 import { useChat } from "@/hooks/use-chat"
 import { AnimatePresence, motion } from "framer-motion"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -43,12 +42,7 @@ export function ChatInterface() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
 
-  const {
-    messages,
-    isLoading: isChatLoading,
-    error: chatError,
-    sendMessage,
-  } = useChat({ conversationId })
+  const { messages, isLoading: isChatLoading, error: chatError, sendMessage } = useChat({ conversationId })
 
   useEffect(() => {
     const checkIfMobile = () => {
@@ -101,7 +95,7 @@ export function ChatInterface() {
   }, [patientProfile])
 
   const loadConversations = async () => {
-    setIsLoading(true)
+    setIsLoadingConversations(true)
     try {
       const response = await fetch(`/api/conversations?patientId=${patientProfile.id}`)
       if (!response.ok) throw new Error("Error al cargar conversaciones")
@@ -123,12 +117,33 @@ export function ChatInterface() {
     } catch (error) {
       console.error("Error al cargar conversaciones:", error)
     } finally {
-      setIsLoading(false)
+      setIsLoadingConversations(false)
     }
   }
 
-  const handleSendMessage = (content: string) => {
-    if (patientProfile) sendMessage(content, customPrompt)
+  const handleSendMessage = async (content: string) => {
+    if (!patientProfile) return
+
+    // Si no hay conversación activa, crea una nueva con título generado
+    if (!conversationId) {
+      const initialTitle = content.slice(0, 40) + (content.length > 40 ? "..." : "")
+      try {
+        const res = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ patientId: patientProfile.id, title: initialTitle }),
+        })
+        if (!res.ok) throw new Error("Error al crear nueva conversación")
+        const data = await res.json()
+        setConversationId(data.conversationId)
+        await loadConversations()
+      } catch (err) {
+        console.error(err)
+        return
+      }
+    }
+
+    sendMessage(content, customPrompt)
   }
 
   const handleSavePrompt = (newPrompt: string) => setCustomPrompt(newPrompt)
@@ -151,7 +166,7 @@ export function ChatInterface() {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId: patientProfile.id }),
+        body: JSON.stringify({ patientId: patientProfile.id, title: "Nueva conversación" }),
       })
       if (!res.ok) throw new Error("Error al crear nueva conversación")
       const data = await res.json()
@@ -214,19 +229,19 @@ export function ChatInterface() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="flex w-full max-h-[100dvh] h-full rounded-2xl overflow-hidden border shadow-2xl bg-white/80 dark:bg-slate-900/60 backdrop-blur-md"
+      className="flex w-full max-h-[100dvh] h-full rounded-2xl overflow-hidden border shadow-2xl bg-white/80 dark:bg-slate-900/60 backdrop-blur-md relative"
     >
       {/* SIDEBAR */}
-      <div className={`transition-all duration-300 ease-in-out ${sidebarOpen ? "w-72" : "w-0"} border-r`}>
+      <div
+        className={`relative transition-all duration-300 ease-in-out ${sidebarOpen ? "w-72" : "w-0"} border-r flex-shrink-0`}
+      >
         {sidebarOpen && (
           <div className="flex flex-col h-full bg-white/80 dark:bg-slate-900/80 p-4">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-slate-700 dark:text-white">Conversaciones</h2>
-              {isMobile && (
-                <Button variant="ghost" size="icon" onClick={toggleSidebar}>
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
+              <Button variant="ghost" size="icon" onClick={toggleSidebar} className="rounded-md">
+                <X className="h-5 w-5" />
+              </Button>
             </div>
             <Button onClick={handleCreateNewConversation} className="mb-4">
               <Plus className="h-4 w-4 mr-2" /> Nueva conversación
@@ -239,10 +254,12 @@ export function ChatInterface() {
                   <div
                     key={conv.id}
                     onClick={() => handleSelectConversation(conv.id)}
-                    className="p-4 mb-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                    className="p-4 mb-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow cursor-pointer group min-h-[90px] flex flex-col gap-1 justify-between"
                   >
                     <div className="flex justify-between items-center mb-2">
-                      <h3 className="text-sm font-semibold text-slate-800 dark:text-white truncate">{getConversationTitle(conv)}</h3>
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-white line-clamp-2 leading-snug">
+                        {getConversationTitle(conv)}
+                      </h3>
                       <Button
                         size="icon"
                         variant="ghost"
@@ -252,7 +269,9 @@ export function ChatInterface() {
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{conv.messages?.length || 0} mensaje(s)</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {conv.messages?.length || 0} mensaje(s)
+                    </p>
                   </div>
                 ))
               ) : (
@@ -265,22 +284,29 @@ export function ChatInterface() {
 
       {/* MAIN CHAT AREA */}
       <div className="flex-1 flex flex-col">
-        <div className="flex justify-between items-center p-4 border-b bg-white/80 dark:bg-slate-800/80 backdrop-blur">
+        <div className="flex justify-between items-center p-4 border-b bg-white/80 dark:bg-slate-800/80 backdrop-blur relative">
+          {/* Botón de toggle para desktop - CUANDO SIDEBAR ESTÁ CERRADO */}
+          {!sidebarOpen && (
+            <Button variant="ghost" size="icon" onClick={toggleSidebar} className="mr-2" aria-label="Abrir sidebar">
+              <Menu className="h-4 w-4" />
+            </Button>
+          )}
+
           <div className="flex items-center gap-2">
-            {isMobile && (
+            {isMobile && sidebarOpen === false && (
               <Button variant="ghost" size="icon" onClick={toggleSidebar}>
                 <Menu className="h-4 w-4" />
               </Button>
             )}
-            <div>
-              <h2 className="text-lg font-semibold">Phy</h2>
+            <div className="flex flex-col items-center justify-center">
+              <div className="flex items-center justify-center">
+                <h2 className="text-lg font-semibold">Physio</h2>
+                <h2 className="text-lg font-bold text-mint dark:text-mint/90">Health</h2>
+              </div>
               <p className="text-xs text-muted-foreground">Hola, {currentUser?.name || "..."}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* {patientProfile && (
-              <ConversationHistory patientId={patientProfile.id} onSelectConversation={handleSelectConversation} />
-            )} */}
             <PromptEditor defaultPrompt={DEFAULT_SYSTEM_PROMPT} onSave={handleSavePrompt} />
           </div>
         </div>

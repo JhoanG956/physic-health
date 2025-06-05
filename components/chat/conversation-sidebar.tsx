@@ -96,7 +96,7 @@ export function ConversationSidebar({
               <div
                 key={conversation.id}
                 className={cn(
-                  "group p-3 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-start shadow-sm",
+                  "group p-3 h-[100px] rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-start shadow-sm",
                   currentConversationId === conversation.id && "bg-mint/10 dark:bg-mint/5"
                 )}
                 onClick={() => onSelectConversation(conversation.id)}
@@ -120,7 +120,7 @@ export function ConversationSidebar({
                       <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
                     </Button>
                   </div>
-                  <p className="text-sm line-clamp-2 font-medium">{getConversationSummary(conversation)}</p>
+                  <p className="text-sm line-clamp-2 font-medium max-h-[3.5rem] overflow-hidden">{getConversationSummary(conversation)}</p>
                   <div className="text-xs text-muted-foreground mt-1">
                     {conversation.messages?.length || 0} mensajes
                   </div>
