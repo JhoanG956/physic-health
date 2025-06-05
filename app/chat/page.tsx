@@ -2,31 +2,30 @@
 
 import { ChatInterface } from "@/components/chat/chat-interface"
 import { motion } from "framer-motion"
+import { AnimatedBackground } from "@/components/ui/animated-background"
 
 export default function ChatPage() {
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <main className="relative z-10 min-h-screen w-full bg-background text-foreground px-4 py-6 md:px-8 lg:px-12">
+      <AnimatedBackground />
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8 text-center"
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.4 }}
+        className="relative z-10 text-center mb-6"
       >
-        <h1 className="text-3xl font-bold mb-2 text-deep-blue dark:text-slate-100">Chat de Fisioterapia</h1>
-        <p className="text-muted-foreground dark:text-slate-300 max-w-2xl mx-auto">
-          Conversa con nuestro asistente de IA para recibir recomendaciones personalizadas y resolver tus dudas sobre
-          fisioterapia.
+        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+          Asistente de Fisioterapia
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Chat personalizado para tus necesidades clínicas y ejercicios.
         </p>
       </motion.div>
 
-      <div className="relative">
-        <div className="absolute -top-10 -right-10 h-20 w-20 blob-shape bg-mint/20 dark:bg-mint/10 animate-float hidden md:block" />
-        <div
-          className="absolute -bottom-10 -left-10 h-16 w-16 blob-shape bg-sky-blue/20 dark:bg-sky-blue/10 animate-float hidden md:block"
-          style={{ animationDelay: "1s" }}
-        />
+      <section className="max-w-6xl mx-auto h-[calc(100vh-10rem)]">
         <ChatInterface />
-      </div>
-    </div>
+      </section>
+    </main>
   )
 }

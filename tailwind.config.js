@@ -1,4 +1,3 @@
-/** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: ["class"],
   content: [
@@ -79,6 +78,19 @@ module.exports = {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-10px)" },
         },
+        // Fondo creativo e interactivo
+        floatSlow: {
+          "0%, 100%": { transform: "translateY(0) translateX(0)" },
+          "50%": { transform: "translateY(-20px) translateX(10px)" },
+        },
+        floatSlower: {
+          "0%, 100%": { transform: "translateY(0) translateX(0)" },
+          "50%": { transform: "translateY(-15px) translateX(-10px)" },
+        },
+        floatMedium: {
+          "0%, 100%": { transform: "translateY(0) translateX(0)" },
+          "50%": { transform: "translateY(-25px) translateX(15px)" },
+        },
         "pulse-gentle": {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.8" },
@@ -89,6 +101,10 @@ module.exports = {
         "accordion-up": "accordion-up 0.2s ease-out",
         float: "float 6s ease-in-out infinite",
         "pulse-gentle": "pulse-gentle 3s ease-in-out infinite",
+        // Fondo creativo e interactivo
+        "float-slow": "floatSlow 12s ease-in-out infinite",
+        "float-slower": "floatSlower 18s ease-in-out infinite",
+        "float-medium": "floatMedium 14s ease-in-out infinite",
       },
     },
   },

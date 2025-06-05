@@ -2,13 +2,6 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { v4 as uuidv4 } from "uuid"
-import type { Patient } from "@/lib/data/patients"
-import {
-  type Conversation,
-  createConversation,
-  getConversationById,
-  addMessageToConversation,
-} from "@/lib/services/conversation-service"
 
 export type Message = {
   id: string
@@ -18,46 +11,83 @@ export type Message = {
 }
 
 interface UseChatProps {
-  patient?: Patient
   conversationId?: string
 }
 
-export function useChat({ patient, conversationId }: UseChatProps = {}) {
+export function useChat({ conversationId }: UseChatProps = {}) {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
+  const [currentConversationId, setCurrentConversationId] = useState<string | undefined>(conversationId)
 
-  // Cargar conversación existente o crear una nueva
+  // Cargar mensajes de la conversación existente
   useEffect(() => {
-    if (!patient) return
-
-    let conversation: Conversation | undefined
-
-    if (conversationId) {
-      conversation = getConversationById(conversationId)
-    }
-
-    if (!conversation) {
-      // Crear mensaje inicial del asistente
-      const initialMessage: Message = {
-        id: uuidv4(),
-        content: `¡Hola ${patient.name}! Soy tu asistente de fisioterapia. ¿En qué puedo ayudarte hoy?`,
-        role: "assistant",
-        timestamp: new Date(),
+    async function loadConversation() {
+      if (!conversationId) {
+        setMessages([
+          {
+            id: uuidv4(),
+            content: "¡Hola! ¿En qué puedo ayudarte hoy?, comienza escribiendo tu consulta.",
+            role: "assistant",
+            timestamp: new Date(),
+          },
+        ])
+        setCurrentConversationId(uuidv4())  // Generar un ID de conversación único si no existe uno
+        return
       }
 
-      // Crear nueva conversación
-      conversation = createConversation(patient.id, initialMessage)
+      try {
+        const response = await fetch(`/api/conversations/${conversationId}`)
+
+        if (!response.ok) {
+          throw new Error("Error al cargar la conversación")
+        }
+
+        const data = await response.json()
+
+        // Verificar si 'data.conversation' existe y contiene mensajes
+        const conversationData = data.conversation
+
+        if (!conversationData || !Array.isArray(conversationData.messages)) {
+          throw new Error("No se encontraron mensajes en la conversación")
+        }
+
+        // Mapear los mensajes y agruparlos por conversación si es necesario
+        const msgArr = conversationData.messages.map((msg: any) => ({
+          id: msg.id,
+          content: cleanContent(msg.content),
+          role: msg.role || "user", // Ajusta si hay información de rol en la respuesta
+          timestamp: new Date(msg.created_at),
+        }))
+        setMessages(msgArr)
+        console.log("Mensajes cargados:", msgArr)
+
+        setCurrentConversationId(conversationId)
+      } catch (error: any) {
+        console.error("Error al cargar la conversación:", error)
+        setError(error.message)
+      }
     }
 
-    setCurrentConversation(conversation)
-    setMessages(conversation.messages)
-  }, [patient, conversationId])
+    if (conversationId) {
+      loadConversation()
+    } else {
+      // Crear un ID para la conversación si no existe
+      setMessages([
+        {
+          id: uuidv4(),
+          content: "¡Hola! ¿En qué puedo ayudarte hoy?, comienza escribiendo tu consulta.",
+          role: "assistant",
+          timestamp: new Date(),
+        },
+      ])
+      setCurrentConversationId(uuidv4())  // Nuevo ID para conversación
+    }
+  }, [conversationId])
 
   const sendMessage = useCallback(
     async (content: string, customPrompt?: string) => {
-      if (!content.trim() || !patient || !currentConversation) return
+      if (!content.trim()) return
 
       // Crear mensaje del usuario
       const userMessage: Message = {
@@ -72,24 +102,18 @@ export function useChat({ patient, conversationId }: UseChatProps = {}) {
       setIsLoading(true)
       setError(null)
 
-      // Actualizar conversación en localStorage
-      const updatedConversation = addMessageToConversation(currentConversation.id, userMessage)
-      if (updatedConversation) {
-        setCurrentConversation(updatedConversation)
-      }
-
       try {
-        // Crear contexto del paciente para el prompt
-        const patientContext = createPatientContext(patient)
-
         // Preparar mensajes para la API
         const apiMessages = messages
           .concat(userMessage)
           .filter((msg) => msg.role !== "system") // Excluimos mensajes de sistema
           .map((msg) => ({
             role: msg.role,
-            content: msg.content,
+            content: cleanContent(msg.content),  // Limpiar el contenido antes de enviarlo
           }))
+
+        // Log para ver cómo se ve el contenido antes de enviarlo
+        //console.log("Contenido de los mensajes antes de enviar:", apiMessages)
 
         // Llamar a la API
         const response = await fetch("/api/chat", {
@@ -100,13 +124,20 @@ export function useChat({ patient, conversationId }: UseChatProps = {}) {
           body: JSON.stringify({
             messages: apiMessages,
             customPrompt,
-            patientContext,
+            conversationId: currentConversationId,
           }),
         })
-
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}))
           throw new Error(errorData.error || `Error: ${response.status}`)
+        }
+
+        // Obtener el ID de la conversación si es nueva
+        if (!currentConversationId) {
+          const newConversationId = response.headers.get("X-Conversation-Id")
+          if (newConversationId) {
+            setCurrentConversationId(newConversationId)
+          }
         }
 
         // Crear un ID para el mensaje de respuesta
@@ -115,42 +146,35 @@ export function useChat({ patient, conversationId }: UseChatProps = {}) {
         // Leer el stream de la respuesta
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()
-        let responseText = ""
+        let currentText = ""
 
         if (reader) {
           // Añadir un mensaje vacío que se irá actualizando
-          const assistantMessage: Message = {
-            id: responseMessageId,
-            content: "",
-            role: "assistant",
-            timestamp: new Date(),
-          }
-
-          setMessages((prev) => [...prev, assistantMessage])
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: responseMessageId,
+              content: "",
+              role: "assistant",
+              timestamp: new Date(),
+            },
+          ])
 
           while (true) {
             const { done, value } = await reader.read()
             if (done) break
 
             const chunk = decoder.decode(value, { stream: true })
-            responseText += chunk
+            currentText += chunk
 
-            // Actualizar el mensaje en tiempo real mientras se recibe
+            // Actualizar el mensaje en tiempo real agregando sólo el nuevo chunk
             setMessages((prev) =>
-              prev.map((msg) => (msg.id === responseMessageId ? { ...msg, content: responseText } : msg)),
+              prev.map((msg) =>
+                msg.id === responseMessageId
+                  ? { ...msg, content: currentText }
+                  : msg
+              ),
             )
-          }
-
-          // Actualizar la conversación en localStorage con la respuesta completa
-          const finalAssistantMessage: Message = {
-            id: responseMessageId,
-            content: responseText,
-            role: "assistant",
-            timestamp: new Date(),
-          }
-
-          if (currentConversation) {
-            addMessageToConversation(currentConversation.id, finalAssistantMessage)
           }
         }
       } catch (err: any) {
@@ -163,75 +187,42 @@ export function useChat({ patient, conversationId }: UseChatProps = {}) {
         setIsLoading(false)
       }
     },
-    [messages, patient, currentConversation],
+    [messages, currentConversationId],
   )
+
+
+  console.log("Mensajes:", messages)
 
   return {
     messages,
     isLoading,
     error,
     sendMessage,
-    conversation: currentConversation,
+    conversationId: currentConversationId,
   }
 }
 
-// Función para crear un contexto del paciente para el prompt
-function createPatientContext(patient: Patient): string {
-  const conditions = patient.conditions
-    .map((c) => `- ${c.name} (${c.severity}): ${c.description}. Diagnosticado: ${c.dateOfDiagnosis}`)
-    .join("\n")
+function cleanContent(content: string): string {
+  if (
+    typeof content === "string" &&
+    content.startsWith('"') &&
+    content.endsWith('"')
+  ) {
+    try {
+      content = JSON.parse(content)
+    } catch {
+      content = content.slice(1, -1)
+    }
+  }
 
-  const medications = patient.medications
-    .map((m) => `- ${m.name} ${m.dosage}, ${m.frequency}. Propósito: ${m.purpose}`)
-    .join("\n")
-
-  const exercises = patient.exercises
-    .map(
-      (e) =>
-        `- ${e.name}: ${e.description}. Frecuencia: ${e.frequency}, Duración: ${e.duration}${e.notes ? `. Notas: ${e.notes}` : ""}`,
-    )
-    .join("\n")
-
-  const allergies =
-    patient.allergies.length > 0
-      ? patient.allergies.map((a) => `- ${a.allergen}: ${a.reaction} (${a.severity})`).join("\n")
-      : "No se reportan alergias."
-
-  const surgeries =
-    patient.surgeries.length > 0
-      ? patient.surgeries.map((s) => `- ${s.procedure} (${s.date})${s.notes ? `. Notas: ${s.notes}` : ""}`).join("\n")
-      : "No se reportan cirugías previas."
-
-  return `
-INFORMACIÓN DEL PACIENTE:
-Nombre: ${patient.name}
-Edad: ${patient.age} años
-Género: ${patient.gender}
-Altura: ${patient.height} cm
-Peso: ${patient.weight} kg
-
-CONDICIONES MÉDICAS:
-${conditions}
-
-MEDICACIÓN ACTUAL:
-${medications}
-
-PLAN DE EJERCICIOS:
-${exercises}
-
-ALERGIAS:
-${allergies}
-
-CIRUGÍAS PREVIAS:
-${surgeries}
-
-NOTAS ADICIONALES:
-${patient.notes}
-
-OBJETIVOS DEL PACIENTE:
-${patient.goals.map((g) => `- ${g}`).join("\n")}
-
-ÚLTIMA VISITA: ${patient.lastVisit || "No registrada"}
-PRÓXIMA VISITA: ${patient.nextVisit || "No programada"}
-`
+  return content
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"')
+    .replace(/(\d+)\.\s*\n(?=\*\*|\w)/g, "$1. ") // unir número con contenido si está separado por salto
+    .replace(/\n{3,}/g, "\n\n") // normalizar múltiples saltos
+    .replace(/(?<!\n)\n(?=\d+\.\s)/g, "\n\n") // doble salto antes de listas
+    .replace(/(?<!\n)\n(?=\*\s)/g, "\n\n") // doble salto antes de viñetas
+    .replace(/([^\n])\n(?=[^\n*])/g, "$1 $2") // unir líneas que no deberían estar separadas
+    .trim()
 }

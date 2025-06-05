@@ -38,11 +38,13 @@ export function PatientSelector({ selectedPatient, onSelectPatient }: PatientSel
         <DialogTrigger asChild>
           <Button
             variant="outline"
-            className="w-full flex justify-between items-center border-mint/30 dark:border-slate-700"
+            className="w-full flex justify-between items-center rounded-xl px-4 py-3 shadow-sm hover:bg-accent/30 transition-colors border-mint/30 dark:border-slate-700"
           >
-            <div className="flex items-center">
-              <UserRound className="mr-2 h-4 w-4 text-mint dark:text-mint/70" />
-              <span>{selectedPatient ? selectedPatient.name : "Seleccionar paciente"}</span>
+            <div className="flex items-center gap-2">
+              <UserRound className="h-4 w-4 text-mint dark:text-mint/70" />
+              <span className="text-sm font-medium truncate">
+                {selectedPatient ? selectedPatient.name : "Seleccionar paciente"}
+              </span>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </Button>
@@ -54,17 +56,17 @@ export function PatientSelector({ selectedPatient, onSelectPatient }: PatientSel
               Elige un paciente para personalizar la conversación según su historial médico y necesidades.
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="h-[400px] pr-4">
-            <div className="space-y-4 mt-4">
+          <ScrollArea className="h-[400px] pr-2 mt-4">
+            <div className="space-y-4">
               {patients.map((patient) => (
                 <div
                   key={patient.id}
-                  className="p-4 border rounded-lg cursor-pointer hover:bg-accent/50 transition-colors"
+                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow hover:bg-accent/40 cursor-pointer transition-all"
                   onClick={() => handleSelectPatient(patient.id)}
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-medium">{patient.name}</h3>
-                    <div className="text-sm text-muted-foreground">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-medium text-sm">{patient.name}</h3>
+                    <div className="text-xs text-muted-foreground">
                       {patient.age} años, {patient.gender}
                     </div>
                   </div>
@@ -74,6 +76,7 @@ export function PatientSelector({ selectedPatient, onSelectPatient }: PatientSel
                         key={index}
                         variant="outline"
                         className={`
+                          text-xs px-2 py-0.5 rounded-full
                           ${condition.severity === "leve" ? "border-mint/50 text-mint dark:text-mint/80" : ""}
                           ${condition.severity === "moderada" ? "border-sky-blue/50 text-sky-blue dark:text-sky-blue/80" : ""}
                           ${condition.severity === "grave" ? "border-soft-coral/50 text-soft-coral dark:text-soft-coral/80" : ""}
@@ -83,7 +86,7 @@ export function PatientSelector({ selectedPatient, onSelectPatient }: PatientSel
                       </Badge>
                     ))}
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">{patient.notes}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2">{patient.notes}</p>
                 </div>
               ))}
             </div>

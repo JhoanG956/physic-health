@@ -1,115 +1,115 @@
-import type { Message } from "@/hooks/use-chat"
+import { executeQuery } from "@/lib/db"
 import { v4 as uuidv4 } from "uuid"
+
+export interface Message {
+  id: string
+  content: string
+  role: "user" | "assistant" | "system"
+  timestamp: Date
+}
 
 export interface Conversation {
   id: string
   patientId: string
+  title?: string
   messages: Message[]
   createdAt: Date
   updatedAt: Date
 }
 
-// Función para guardar una conversación en localStorage
-export function saveConversation(conversation: Conversation): void {
-  try {
-    // Obtener las conversaciones existentes
-    const conversations = getConversations()
+// Crear una nueva conversación
+export async function createConversation(patientId: string, title?: string): Promise<string> {
+  const conversationId = uuidv4()
 
-    // Buscar si ya existe una conversación con este ID
-    const existingIndex = conversations.findIndex((conv) => conv.id === conversation.id)
-
-    if (existingIndex >= 0) {
-      // Actualizar la conversación existente
-      conversations[existingIndex] = {
-        ...conversation,
-        updatedAt: new Date(),
-      }
-    } else {
-      // Añadir la nueva conversación
-      conversations.push(conversation)
-    }
-
-    // Guardar en localStorage
-    localStorage.setItem("physio_health_conversations", JSON.stringify(conversations))
-  } catch (error) {
-    console.error("Error al guardar la conversación:", error)
-  }
-}
-
-// Función para obtener todas las conversaciones
-export function getConversations(): Conversation[] {
-  try {
-    const conversationsJson = localStorage.getItem("physio_health_conversations")
-    if (!conversationsJson) return []
-
-    const conversations = JSON.parse(conversationsJson) as Conversation[]
-
-    // Convertir las fechas de string a Date
-    return conversations.map((conv) => ({
-      ...conv,
-      createdAt: new Date(conv.createdAt),
-      updatedAt: new Date(conv.updatedAt),
-      messages: conv.messages.map((msg) => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp),
-      })),
-    }))
-  } catch (error) {
-    console.error("Error al obtener las conversaciones:", error)
-    return []
-  }
-}
-
-// Función para obtener las conversaciones de un paciente específico
-export function getPatientConversations(patientId: string): Conversation[] {
-  const conversations = getConversations()
-  return conversations.filter((conv) => conv.patientId === patientId)
-}
-
-// Función para obtener una conversación específica
-export function getConversationById(conversationId: string): Conversation | undefined {
-  const conversations = getConversations()
-  return conversations.find((conv) => conv.id === conversationId)
-}
-
-// Función para crear una nueva conversación
-export function createConversation(patientId: string, initialMessage?: Message): Conversation {
-  const now = new Date()
-  const conversation: Conversation = {
-    id: uuidv4(),
+  await executeQuery(`INSERT INTO conversations (id, patient_id, title) VALUES ($1, $2, $3)`, [
+    conversationId,
     patientId,
-    messages: initialMessage ? [initialMessage] : [],
-    createdAt: now,
-    updatedAt: now,
+    title || null,
+  ])
+
+  return conversationId
+}
+
+// Añadir un mensaje a una conversación
+export async function addMessage(conversationId: string, message: Omit<Message, "id">): Promise<string> {
+  const messageId = uuidv4()
+
+  await executeQuery(
+    `INSERT INTO messages (id, conversation_id, role, content, timestamp) 
+     VALUES ($1, $2, $3, $4, $5)`,
+    [messageId, conversationId, message.role, message.content, message.timestamp],
+  )
+
+  // Actualizar la fecha de actualización de la conversación
+  await executeQuery(`UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [conversationId])
+
+  return messageId
+}
+
+// Obtener una conversación por ID
+export async function getConversation(conversationId: string): Promise<Conversation | null> {
+  const conversations = await executeQuery(`SELECT * FROM conversations WHERE id = $1`, [conversationId])
+
+  if (conversations.length === 0) return null
+
+  const conversation = conversations[0]
+
+  const messages = await executeQuery(`SELECT * FROM messages WHERE conversation_id = $1 ORDER BY timestamp ASC`, [
+    conversationId,
+  ])
+
+  return {
+    id: conversation.id,
+    patientId: conversation.patient_id,
+    title: conversation.title,
+    messages: messages.map((m) => ({
+      id: m.id,
+      content: m.content,
+      role: m.role as "user" | "assistant" | "system",
+      timestamp: new Date(m.timestamp),
+    })),
+    createdAt: new Date(conversation.created_at),
+    updatedAt: new Date(conversation.updated_at),
+  }
+}
+
+// Obtener todas las conversaciones de un paciente
+export async function getPatientConversations(patientId: string): Promise<Conversation[]> {
+  const conversations = await executeQuery(
+    `SELECT * FROM conversations WHERE patient_id = $1 ORDER BY updated_at DESC`,
+    [patientId],
+  )
+
+  const result: Conversation[] = []
+
+  for (const conversation of conversations) {
+    const messages = await executeQuery(`SELECT * FROM messages WHERE conversation_id = $1 ORDER BY timestamp ASC`, [
+      conversation.id,
+    ])
+
+    result.push({
+      id: conversation.id,
+      patientId: conversation.patient_id,
+      title: conversation.title,
+      messages: messages.map((m) => ({
+        id: m.id,
+        content: m.content,
+        role: m.role as "user" | "assistant" | "system",
+        timestamp: new Date(m.timestamp),
+      })),
+      createdAt: new Date(conversation.created_at),
+      updatedAt: new Date(conversation.updated_at),
+    })
   }
 
-  saveConversation(conversation)
-  return conversation
+  return result
 }
 
-// Función para añadir un mensaje a una conversación
-export function addMessageToConversation(conversationId: string, message: Message): Conversation | undefined {
-  const conversation = getConversationById(conversationId)
-  if (!conversation) return undefined
-
-  conversation.messages.push(message)
-  conversation.updatedAt = new Date()
-
-  saveConversation(conversation)
-  return conversation
-}
-
-// Función para eliminar una conversación
-export function deleteConversation(conversationId: string): boolean {
+// Eliminar una conversación
+export async function deleteConversation(conversationId: string): Promise<boolean> {
   try {
-    const conversations = getConversations()
-    const filteredConversations = conversations.filter((conv) => conv.id !== conversationId)
-
-    if (filteredConversations.length === conversations.length) {
-      return false // No se encontró la conversación
-    }
-
-    localStorage.setItem("physio_health_conversations", JSON.stringify(filteredConversations))
+    // Los mensajes se eliminarán automáticamente por la restricción ON DELETE CASCADE
+    await executeQuery(`DELETE FROM conversations WHERE id = $1`, [conversationId])
     return true
   } catch (error) {
     console.error("Error al eliminar la conversación:", error)

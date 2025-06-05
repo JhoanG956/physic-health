@@ -1,6 +1,9 @@
+// next.config.mjs
+import crypto from 'crypto-browserify';
+import stream from 'stream-browserify';
+
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -10,6 +13,19 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-}
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        crypto: 'crypto-browserify',  // Usar la ruta como string
+        stream: 'stream-browserify',  // Usar la ruta como string
+        fs: false,
+        path: false,
+        os: false,
+      };
+    }
+    return config;
+  },
+};
 
-export default nextConfig
+export default nextConfig;
