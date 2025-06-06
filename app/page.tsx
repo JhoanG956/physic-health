@@ -82,21 +82,21 @@ export default function Home() {
           <FeatureCard
             title="Chat Inteligente"
             description="Interactúa con nuestro asistente de IA para recibir recomendaciones personalizadas."
-            icon={<MessageSquare className="h-6 w-6 text-deep-blue dark:text-sky-blue" />}
+            icon={<MessageSquare className="h-8 w-8 text-deep-blue dark:text-sky-blue" />}
             href="/chat"
             delay={0}
           />
           <FeatureCard
             title="Feed Personalizado"
             description="Accede a ejercicios, consejos y reportes diarios adaptados a tu progreso."
-            icon={<Newspaper className="h-6 w-6 text-deep-blue dark:text-mint" />}
+            icon={<Newspaper className="h-8 w-8 text-deep-blue dark:text-mint" />}
             href="/feed"
             delay={0.2}
           />
           <FeatureCard
             title="Dashboard"
             description="Visualiza tu progreso, ejercicios realizados y próximas actividades."
-            icon={<BarChart3 className="h-6 w-6 text-deep-blue dark:text-soft-coral" />}
+            icon={<BarChart3 className="h-8 w-8 text-deep-blue dark:text-soft-coral" />}
             href="/dashboard"
             delay={0.4}
           />
@@ -112,19 +112,19 @@ export default function Home() {
           <h2 className="text-3xl font-bold mb-6 text-deep-blue dark:text-slate-100">¿Por qué elegir Physio Health?</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto mt-10">
             <BenefitCard
-              icon={<Sparkles className="h-6 w-6 text-deep-blue dark:text-sky-blue" />}
+              icon={<Sparkles className="h-8 w-8 text-white" />}
               title="Personalizado"
               description="Recomendaciones adaptadas a tu condición física y objetivos personales."
               delay={0}
             />
             <BenefitCard
-              icon={<Activity className="h-6 w-6 text-deep-blue dark:text-mint" />}
+              icon={<Activity className="h-8 w-8 text-white" />}
               title="Seguimiento continuo"
               description="Monitoreo de tu progreso y ajustes en tiempo real para optimizar resultados."
               delay={0.2}
             />
             <BenefitCard
-              icon={<Heart className="h-6 w-6 text-deep-blue dark:text-soft-coral" />}
+              icon={<Heart className="h-8 w-8 text-white" />}
               title="Profesional"
               description="Respaldado por fisioterapeutas expertos y tecnología de vanguardia."
               delay={0.4}
@@ -155,19 +155,21 @@ function FeatureCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.4 + delay }}
-      whileHover={{ y: -3 }}
+      whileHover={{ y: -5, scale: 1.03 }}
+      transition={{ duration: 0.2 }}
+      className="h-full"
     >
-      <Card className="h-full overflow-hidden border dark:border-slate-800 shadow-md">
-        <div className="h-1 w-full bg-gradient-to-r from-mint/30 to-sky-blue/30 dark:from-mint/20 dark:to-sky-blue/20" />
-        <CardHeader>
-          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-mint/10 dark:bg-slate-800 mb-4">
-            {icon}
-          </div>
-          <CardTitle className="text-xl dark:text-slate-100">{title}</CardTitle>
-          <CardDescription className="text-base dark:text-slate-300">{description}</CardDescription>
+      <Card className="h-full overflow-hidden shadow-xl bg-gradient-to-br from-mint/20 to-sky-blue/20 dark:from-mint/10 dark:to-sky-blue/10 border border-slate-200 dark:border-slate-700 flex flex-col">
+        <CardHeader className="p-6 flex-grow">
+          <div className="p-3 bg-white/80 dark:bg-slate-900/80 rounded-full shadow-md mb-5 inline-block">{icon}</div>
+          <CardTitle className="text-2xl font-bold text-deep-blue dark:text-sky-blue mb-2">{title}</CardTitle>
+          <CardDescription className="text-slate-700 dark:text-slate-300 text-sm">{description}</CardDescription>
         </CardHeader>
-        <CardFooter>
-          <Button asChild className="w-full bg-deep-blue hover:bg-deep-blue/90 text-white">
+        <CardFooter className="p-6 pt-0">
+          <Button
+            asChild
+            className="w-full bg-deep-blue hover:bg-deep-blue/90 dark:bg-sky-blue dark:hover:bg-sky-blue/90 dark:text-deep-blue text-white font-semibold"
+          >
             <Link href={href}>
               Acceder <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
@@ -194,13 +196,13 @@ function BenefitCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.8 + delay }}
-      className="flex flex-col items-center p-6 rounded-xl bg-white dark:bg-slate-800 shadow-md dark:subtle-border"
+      className="h-full flex flex-col items-center p-6 rounded-xl shadow-xl bg-gradient-to-tl from-warm-gray/60 to-white dark:from-slate-800/80 dark:to-slate-800/50 border border-slate-200 dark:border-slate-700"
+      whileHover={{ y: -5, scale: 1.03 }}
+      transition={{ duration: 0.2 }}
     >
-      <div className="flex items-center justify-center w-12 h-12 rounded-full bg-mint/10 dark:bg-slate-700 mb-4">
-        {icon}
-      </div>
-      <h3 className="text-lg font-semibold mb-2 dark:text-slate-100">{title}</h3>
-      <p className="text-muted-foreground dark:text-slate-300 text-center">{description}</p>
+      <div className="p-4 bg-gradient-to-br from-mint to-sky-blue rounded-full shadow-lg mb-5">{icon}</div>
+      <h3 className="text-xl font-bold text-deep-blue dark:text-sky-blue mb-2">{title}</h3>
+      <p className="text-sm text-slate-600 dark:text-slate-300 text-center flex-grow">{description}</p>
     </motion.div>
   )
 }
