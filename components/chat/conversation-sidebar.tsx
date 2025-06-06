@@ -77,7 +77,7 @@ export function ConversationSidebar({
                 <div className="flex items-center truncate">
                   <MessageSquare className="h-4 w-4 mr-2 flex-shrink-0" />
                   <span className="truncate text-sm">
-                    {conv.title || new Date(conv.created_at).toLocaleDateString()}
+                    {conv.title || new Date(conv.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 <Button

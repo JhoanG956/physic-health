@@ -131,7 +131,7 @@ export function ChatInterface() {
       }, [])
 
       // Ordenar mensajes dentro de cada conversación por fecha
-      grouped.forEach((conv) => {
+      grouped.forEach((conv: { id: string; messages: any[] }) => {
         conv.messages.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       })
 
@@ -181,11 +181,9 @@ export function ChatInterface() {
       }
     }
     // Asegurarse que currentConversationId está definido antes de enviar el mensaje
-    if (currentConversationId) {
-      sendMessage(content, customPrompt, currentConversationId) // Pasar el ID de la conversación
-    } else {
-      setError("Error: ID de conversación no definido para enviar mensaje.")
-    }
+    
+    sendMessage(content, customPrompt) // Pasar el ID de la conversación
+    
   }
 
   const handleSavePrompt = (newPrompt: string) => setCustomPrompt(newPrompt)
@@ -199,7 +197,7 @@ export function ChatInterface() {
     const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")
     if (lastUserMessage && patientProfile && conversationId) {
       // Asegurar que conversationId existe
-      sendMessage(lastUserMessage.content, customPrompt, conversationId)
+      sendMessage(lastUserMessage.content, customPrompt)
     }
   }
 
