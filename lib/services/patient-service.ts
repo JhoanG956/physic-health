@@ -1,7 +1,7 @@
 import { query } from "@/lib/db"
 import { v4 as uuidv4 } from "uuid"
 
-// Interfaces para los datos del paciente
+// Interfaces (sin cambios, ya las tienes definidas)
 export interface PatientCondition {
   id?: string
   name: string
@@ -44,7 +44,7 @@ export interface PatientSurgery {
 export interface PatientProfile {
   id: string
   userId: string
-  name: string
+  name: string // Nombre del usuario, se obtiene del JOIN con la tabla users
   age: number
   gender: "masculino" | "femenino" | "otro"
   height: number // en cm
@@ -74,10 +74,10 @@ export interface CreatePatientProfileData {
   nextVisit?: string
 }
 
+// --- Funciones existentes (createPatientProfile, addCondition, etc.) sin cambios ---
 // Crear un perfil de paciente
 export async function createPatientProfile(data: CreatePatientProfileData): Promise<string> {
   const patientId = uuidv4()
-
   await query(
     `INSERT INTO patient_profiles 
      (id, user_id, age, gender, height, weight, notes, goals, last_visit, next_visit) 
@@ -95,14 +95,12 @@ export async function createPatientProfile(data: CreatePatientProfileData): Prom
       data.nextVisit ? new Date(data.nextVisit) : null,
     ],
   )
-
   return patientId
 }
 
 // Añadir una condición médica
 export async function addCondition(patientId: string, condition: PatientCondition): Promise<string> {
   const conditionId = uuidv4()
-
   await query(
     `INSERT INTO conditions 
      (id, patient_id, name, description, severity, date_of_diagnosis) 
@@ -116,28 +114,24 @@ export async function addCondition(patientId: string, condition: PatientConditio
       new Date(condition.dateOfDiagnosis),
     ],
   )
-
   return conditionId
 }
 
 // Añadir un medicamento
 export async function addMedication(patientId: string, medication: PatientMedication): Promise<string> {
   const medicationId = uuidv4()
-
   await query(
     `INSERT INTO medications 
      (id, patient_id, name, dosage, frequency, purpose) 
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [medicationId, patientId, medication.name, medication.dosage, medication.frequency, medication.purpose],
   )
-
   return medicationId
 }
 
 // Añadir un ejercicio
 export async function addExercise(patientId: string, exercise: PatientExercise): Promise<string> {
   const exerciseId = uuidv4()
-
   await query(
     `INSERT INTO exercises 
      (id, patient_id, name, description, frequency, duration, notes) 
@@ -152,204 +146,85 @@ export async function addExercise(patientId: string, exercise: PatientExercise):
       exercise.notes || null,
     ],
   )
-
   return exerciseId
 }
 
 // Añadir una alergia
 export async function addAllergy(patientId: string, allergy: PatientAllergy): Promise<string> {
   const allergyId = uuidv4()
-
   await query(
     `INSERT INTO allergies 
      (id, patient_id, allergen, reaction, severity) 
      VALUES ($1, $2, $3, $4, $5)`,
     [allergyId, patientId, allergy.allergen, allergy.reaction, allergy.severity],
   )
-
   return allergyId
 }
 
 // Añadir una cirugía
 export async function addSurgery(patientId: string, surgery: PatientSurgery): Promise<string> {
   const surgeryId = uuidv4()
-
   await query(
     `INSERT INTO surgeries 
      (id, patient_id, procedure, date, notes) 
      VALUES ($1, $2, $3, $4, $5)`,
     [surgeryId, patientId, surgery.procedure, new Date(surgery.date), surgery.notes || null],
   )
-
   return surgeryId
 }
 
-// Obtener un perfil de paciente completo
+// Obtener un perfil de paciente completo (sin cambios, ya es bastante completo)
 export async function getPatientProfile(patientId: string): Promise<PatientProfile | null> {
   try {
-    // Obtener el perfil básico con el nombre del usuario
     const profiles = await query(
-      `
-      SELECT 
-        pp.id, 
-        pp.user_id, 
-        u.name, 
-        pp.age, 
-        pp.gender, 
-        pp.height, 
-        pp.weight, 
-        pp.notes, 
-        pp.goals, 
-        pp.last_visit, 
-        pp.next_visit, 
-        pp.created_at, 
-        pp.updated_at
-      FROM 
-        patient_profiles pp
-      JOIN 
-        users u ON pp.user_id = u.id
-      WHERE 
-        pp.id = $1
-    `,
+      `SELECT pp.id, pp.user_id, u.name, pp.age, pp.gender, pp.height, pp.weight, pp.notes, pp.goals, pp.last_visit, pp.next_visit, pp.created_at, pp.updated_at
+       FROM patient_profiles pp
+       JOIN users u ON pp.user_id = u.id
+       WHERE pp.id = $1`,
       [patientId],
     )
-
     if (profiles.length === 0) return null
+    const profileData = profiles[0]
 
-    const profile = profiles[0]
-
-    // Obtener condiciones
     const conditions = await query(
-      `
-      SELECT 
-        id, 
-        name, 
-        description, 
-        severity, 
-        date_of_diagnosis as "dateOfDiagnosis"
-      FROM 
-        conditions 
-      WHERE 
-        patient_id = $1
-    `,
+      `SELECT id, name, description, severity, date_of_diagnosis as "dateOfDiagnosis" FROM conditions WHERE patient_id = $1`,
       [patientId],
     )
-
-    // Obtener medicamentos
     const medications = await query(
-      `
-      SELECT 
-        id, 
-        name, 
-        dosage, 
-        frequency, 
-        purpose
-      FROM 
-        medications 
-      WHERE 
-        patient_id = $1
-    `,
+      `SELECT id, name, dosage, frequency, purpose FROM medications WHERE patient_id = $1`,
       [patientId],
     )
-
-    // Obtener ejercicios
     const exercises = await query(
-      `
-      SELECT 
-        id, 
-        name, 
-        description, 
-        frequency, 
-        duration, 
-        notes
-      FROM 
-        exercises 
-      WHERE 
-        patient_id = $1
-    `,
+      `SELECT id, name, description, frequency, duration, notes FROM exercises WHERE patient_id = $1`,
       [patientId],
     )
-
-    // Obtener alergias
-    const allergies = await query(
-      `
-      SELECT 
-        id, 
-        allergen, 
-        reaction, 
-        severity
-      FROM 
-        allergies 
-      WHERE 
-        patient_id = $1
-    `,
-      [patientId],
-    )
-
-    // Obtener cirugías
-    const surgeries = await query(
-      `
-      SELECT 
-        id, 
-        procedure, 
-        date, 
-        notes
-      FROM 
-        surgeries 
-      WHERE 
-        patient_id = $1
-    `,
-      [patientId],
-    )
+    const allergies = await query(`SELECT id, allergen, reaction, severity FROM allergies WHERE patient_id = $1`, [
+      patientId,
+    ])
+    const surgeries = await query(`SELECT id, procedure, date, notes FROM surgeries WHERE patient_id = $1`, [patientId])
 
     return {
-      id: profile.id,
-      userId: profile.user_id,
-      name: profile.name,
-      age: profile.age,
-      gender: profile.gender as "masculino" | "femenino" | "otro",
-      height: profile.height,
-      weight: profile.weight,
-      notes: profile.notes,
-      goals: profile.goals,
-      lastVisit: profile.last_visit ? new Date(profile.last_visit).toISOString().split("T")[0] : undefined,
-      nextVisit: profile.next_visit ? new Date(profile.next_visit).toISOString().split("T")[0] : undefined,
+      id: profileData.id,
+      userId: profileData.user_id,
+      name: profileData.name,
+      age: profileData.age,
+      gender: profileData.gender as "masculino" | "femenino" | "otro",
+      height: profileData.height,
+      weight: profileData.weight,
+      notes: profileData.notes,
+      goals: profileData.goals || [],
+      lastVisit: profileData.last_visit ? new Date(profileData.last_visit).toISOString().split("T")[0] : undefined,
+      nextVisit: profileData.next_visit ? new Date(profileData.next_visit).toISOString().split("T")[0] : undefined,
       conditions: conditions.map((c) => ({
-        id: c.id,
-        name: c.name,
-        description: c.description,
-        severity: c.severity as "leve" | "moderada" | "grave",
+        ...c,
         dateOfDiagnosis: new Date(c.dateOfDiagnosis).toISOString().split("T")[0],
       })),
-      medications: medications.map((m) => ({
-        id: m.id,
-        name: m.name,
-        dosage: m.dosage,
-        frequency: m.frequency,
-        purpose: m.purpose,
-      })),
-      exercises: exercises.map((e) => ({
-        id: e.id,
-        name: e.name,
-        description: e.description,
-        frequency: e.frequency,
-        duration: e.duration,
-        notes: e.notes,
-      })),
-      allergies: allergies.map((a) => ({
-        id: a.id,
-        allergen: a.allergen,
-        reaction: a.reaction,
-        severity: a.severity as "leve" | "moderada" | "grave",
-      })),
-      surgeries: surgeries.map((s) => ({
-        id: s.id,
-        procedure: s.procedure,
-        date: new Date(s.date).toISOString().split("T")[0],
-        notes: s.notes,
-      })),
-      createdAt: new Date(profile.created_at),
-      updatedAt: new Date(profile.updated_at),
+      medications,
+      exercises,
+      allergies,
+      surgeries: surgeries.map((s) => ({ ...s, date: new Date(s.date).toISOString().split("T")[0] })),
+      createdAt: new Date(profileData.created_at),
+      updatedAt: new Date(profileData.updated_at),
     }
   } catch (error) {
     console.error("Error al obtener perfil de paciente:", error)
@@ -357,81 +232,73 @@ export async function getPatientProfile(patientId: string): Promise<PatientProfi
   }
 }
 
-// Obtener el perfil de paciente por ID de usuario
+// Obtener el perfil de paciente por ID de usuario (sin cambios)
 export async function getPatientProfileByUserId(userId: string): Promise<PatientProfile | null> {
   const profiles = await query(`SELECT id FROM patient_profiles WHERE user_id = $1`, [userId])
-
   if (profiles.length === 0) return null
-
   return getPatientProfile(profiles[0].id)
 }
 
-// Actualizar un perfil de paciente
-export async function updatePatientProfile(patientId: string, data: Partial<CreatePatientProfileData>): Promise<void> {
-  const updates = []
-  const values = []
-  let paramIndex = 1
-
-  if (data.age !== undefined) {
-    updates.push(`age = $${paramIndex}`)
-    values.push(data.age)
-    paramIndex++
-  }
-
-  if (data.gender !== undefined) {
-    updates.push(`gender = $${paramIndex}`)
-    values.push(data.gender)
-    paramIndex++
-  }
-
-  if (data.height !== undefined) {
-    updates.push(`height = $${paramIndex}`)
-    values.push(data.height)
-    paramIndex++
-  }
-
-  if (data.weight !== undefined) {
-    updates.push(`weight = $${paramIndex}`)
-    values.push(data.weight)
-    paramIndex++
-  }
-
-  if (data.notes !== undefined) {
-    updates.push(`notes = $${paramIndex}`)
-    values.push(data.notes)
-    paramIndex++
-  }
-
-  if (data.goals !== undefined) {
-    updates.push(`goals = $${paramIndex}`)
-    values.push(data.goals)
-    paramIndex++
-  }
-
-  if (data.lastVisit !== undefined) {
-    updates.push(`last_visit = $${paramIndex}`)
-    values.push(data.lastVisit ? new Date(data.lastVisit) : null)
-    paramIndex++
-  }
-
-  if (data.nextVisit !== undefined) {
-    updates.push(`next_visit = $${paramIndex}`)
-    values.push(data.nextVisit ? new Date(data.nextVisit) : null)
-    paramIndex++
-  }
-
-  updates.push(`updated_at = $${paramIndex}`)
-  values.push(new Date())
-  paramIndex++
-
-  if (updates.length === 0) return
-
-  values.push(patientId)
-
-  await query(`UPDATE patient_profiles SET ${updates.join(", ")} WHERE id = $${paramIndex}`, values)
+// --- NUEVA FUNCIÓN para actualizar el perfil completo ---
+interface UpdatePatientProfileData extends CreatePatientProfileData {
+  conditions: PatientCondition[]
+  medications: PatientMedication[]
+  exercises: PatientExercise[]
+  allergies: PatientAllergy[]
+  surgeries: PatientSurgery[]
 }
 
-// Obtener todos los pacientes (versión simplificada para listados)
+export async function updateFullPatientProfile(patientId: string, data: UpdatePatientProfileData): Promise<void> {
+  // 1. Actualizar patient_profiles
+  await query(
+    `UPDATE patient_profiles 
+     SET age = $1, gender = $2, height = $3, weight = $4, notes = $5, goals = $6, last_visit = $7, next_visit = $8, updated_at = NOW()
+     WHERE id = $9`,
+    [
+      data.age,
+      data.gender,
+      data.height,
+      data.weight,
+      data.notes || null,
+      data.goals,
+      data.lastVisit ? new Date(data.lastVisit) : null,
+      data.nextVisit ? new Date(data.nextVisit) : null,
+      patientId,
+    ],
+  )
+
+  // 2. Eliminar y reinsertar condiciones
+  await query(`DELETE FROM conditions WHERE patient_id = $1`, [patientId])
+  for (const condition of data.conditions) {
+    if (condition.name.trim()) await addCondition(patientId, condition)
+  }
+
+  // 3. Eliminar y reinsertar medicamentos
+  await query(`DELETE FROM medications WHERE patient_id = $1`, [patientId])
+  for (const medication of data.medications) {
+    if (medication.name.trim()) await addMedication(patientId, medication)
+  }
+
+  // 4. Eliminar y reinsertar ejercicios
+  await query(`DELETE FROM exercises WHERE patient_id = $1`, [patientId])
+  for (const exercise of data.exercises) {
+    if (exercise.name.trim()) await addExercise(patientId, exercise)
+  }
+
+  // 5. Eliminar y reinsertar alergias
+  await query(`DELETE FROM allergies WHERE patient_id = $1`, [patientId])
+  for (const allergy of data.allergies) {
+    if (allergy.allergen.trim()) await addAllergy(patientId, allergy)
+  }
+
+  // 6. Eliminar y reinsertar cirugías
+  await query(`DELETE FROM surgeries WHERE patient_id = $1`, [patientId])
+  for (const surgery of data.surgeries) {
+    if (surgery.procedure.trim()) await addSurgery(patientId, surgery)
+  }
+}
+
+// Obtener todos los pacientes (sin cambios)
 export async function getAllPatients(): Promise<
   Array<{
     id: string
@@ -443,21 +310,11 @@ export async function getAllPatients(): Promise<
   }>
 > {
   const patients = await query(`
-    SELECT 
-      pp.id, 
-      u.name, 
-      pp.age, 
-      pp.gender, 
-      pp.last_visit, 
-      pp.next_visit
-    FROM 
-      patient_profiles pp
-    JOIN 
-      users u ON pp.user_id = u.id
-    ORDER BY 
-      u.name ASC
+    SELECT pp.id, u.name, pp.age, pp.gender, pp.last_visit, pp.next_visit
+    FROM patient_profiles pp
+    JOIN users u ON pp.user_id = u.id
+    ORDER BY u.name ASC
   `)
-
   return patients.map((p) => ({
     id: p.id,
     name: p.name,

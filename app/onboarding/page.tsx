@@ -1,18 +1,26 @@
+// No se necesitan cambios directos en app/onboarding/page.tsx
+// El componente MedicalProfileForm ya maneja la lógica de carga y actualización.
+// Solo asegúrate de que la página esté protegida y solo accesible para usuarios autenticados si es necesario.
 import { MedicalProfileForm } from "@/components/onboarding/medical-profile-form"
+import { Suspense } from "react"
+import { Loader2 } from "lucide-react"
+
+function LoadingFallback() {
+  return (
+    <div className="flex justify-center items-center min-h-screen">
+      <Loader2 className="h-12 w-12 animate-spin text-deep-blue" />
+    </div>
+  )
+}
 
 export default function OnboardingPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-center mb-4 text-deep-blue dark:text-slate-100">
-          Completa tu perfil médico
-        </h1>
-        <p className="text-center text-muted-foreground mb-8 max-w-2xl mx-auto">
-          Esta información nos ayudará a personalizar tu experiencia y brindarte recomendaciones más precisas para tu
-          fisioterapia. Toda la información que proporciones es confidencial y solo se utilizará para mejorar tu
-          atención.
-        </p>
-        <MedicalProfileForm />
+        {/* El título y descripción se manejan dentro de MedicalProfileForm ahora */}
+        <Suspense fallback={<LoadingFallback />}>
+          <MedicalProfileForm />
+        </Suspense>
       </div>
     </div>
   )

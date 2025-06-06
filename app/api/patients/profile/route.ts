@@ -1,69 +1,96 @@
 import { NextResponse } from "next/server"
-import { query } from "@/lib/db"
+import { query } from "@/lib/db" // Asumiendo que tienes una función query en db.ts
 import { getServerUser } from "@/lib/services/server-auth-service"
+import {
+  getPatientProfileByUserId,
+  updateFullPatientProfile,
+  type CreatePatientProfileData,
+  type PatientCondition,
+  type PatientMedication,
+  type PatientExercise,
+  type PatientAllergy,
+  type PatientSurgery,
+} from "@/lib/services/patient-service"
 
-// GET: Obtener perfil del paciente
-// GET: Obtener perfil del paciente
+// GET: Obtener perfil del paciente (usando el userId del usuario autenticado o uno provisto)
 export async function GET(request: Request) {
   try {
     const user = await getServerUser()
-
     if (!user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 })
     }
 
-    // Obtener userId de la query string de la solicitud
     const url = new URL(request.url)
-    const userId = url.searchParams.get("userId") || user.id
+    // Permitir obtener perfil de otro usuario si el actual es admin, o siempre el propio.
+    // Por ahora, simplificamos y solo permitimos obtener el perfil del usuario autenticado.
+    const userIdToFetch = user.id
+    // const userIdToFetch = url.searchParams.get("userId") || user.id; // Podrías usar esto si necesitas más flexibilidad
 
-    // Obtener perfil
-    const [profile] = await query(`SELECT * FROM patient_profiles WHERE user_id = $1`, [userId])
+    const patientProfile = await getPatientProfileByUserId(userIdToFetch)
 
-    if (!profile) {
-      return NextResponse.json({ error: "Perfil no encontrado" }, { status: 404 })
+    if (!patientProfile) {
+      // Es posible que un usuario exista pero no tenga perfil médico aún.
+      // Devolvemos un objeto vacío o un estado específico para que el frontend sepa que debe crear uno.
+      return NextResponse.json(
+        { profile: null, message: "Perfil no encontrado, se puede crear uno nuevo." },
+        { status: 200 },
+      )
     }
 
-    return NextResponse.json({ profile })
+    return NextResponse.json({ profile: patientProfile })
   } catch (error) {
     console.error("Error al obtener perfil:", error)
     return NextResponse.json({ error: "Error al obtener perfil" }, { status: 500 })
   }
 }
 
-// PUT: Actualizar perfil del paciente
+// PUT: Actualizar perfil completo del paciente
+interface UpdateProfilePayload extends CreatePatientProfileData {
+  conditions: PatientCondition[]
+  medications: PatientMedication[]
+  exercises: PatientExercise[]
+  allergies: PatientAllergy[]
+  surgeries: PatientSurgery[]
+}
+
 export async function PUT(request: Request) {
   try {
     const user = await getServerUser()
-
     if (!user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 })
     }
 
-    const data = await request.json()
+    const data: UpdateProfilePayload = await request.json()
 
-    // Verificar si el perfil existe
-    const [existingProfile] = await query(`SELECT id FROM patient_profiles WHERE user_id = $1`, [user.id])
+    // Obtener el patient_id basado en el user.id
+    const [existingProfileInfo] = await query(`SELECT id FROM patient_profiles WHERE user_id = $1`, [user.id])
 
-    if (!existingProfile) {
-      return NextResponse.json({ error: "Perfil no encontrado" }, { status: 404 })
+    if (!existingProfileInfo || !existingProfileInfo.id) {
+      return NextResponse.json(
+        { error: "Perfil no encontrado para este usuario. No se puede actualizar." },
+        { status: 404 },
+      )
     }
+    const patientId = existingProfileInfo.id
 
-    // Actualizar perfil
-    await query(
-      `UPDATE patient_profiles 
-       SET 
-         age = $1, 
-         gender = $2, 
-         height = $3, 
-         weight = $4, 
-         activity_level = $5, 
-         medical_history = $6, 
-         updated_at = NOW() 
-       WHERE id = $7`,
-      [data.age, data.gender, data.height, data.weight, data.activity_level, data.medical_history, existingProfile.id],
-    )
+    await updateFullPatientProfile(patientId, {
+      userId: user.id, // Aunque no se usa directamente en updateFullPatientProfile para la query principal, es bueno tenerlo
+      age: data.age,
+      gender: data.gender,
+      height: data.height,
+      weight: data.weight,
+      notes: data.notes,
+      goals: data.goals,
+      lastVisit: data.lastVisit,
+      nextVisit: data.nextVisit,
+      conditions: data.conditions || [],
+      medications: data.medications || [],
+      exercises: data.exercises || [],
+      allergies: data.allergies || [],
+      surgeries: data.surgeries || [],
+    })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, message: "Perfil actualizado correctamente" })
   } catch (error) {
     console.error("Error al actualizar perfil:", error)
     return NextResponse.json({ error: "Error al actualizar perfil" }, { status: 500 })

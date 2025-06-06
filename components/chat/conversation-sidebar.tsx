@@ -1,141 +1,101 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Trash2, Plus, MessageSquare } from "lucide-react"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { cn } from "@/lib/utils"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { PlusCircle, MessageSquare, Trash2, UserCircle } from "lucide-react" // Añadido UserCircle
+import type { Conversation } from "@/lib/services/conversation-service" // Asegúrate que la ruta es correcta
+import Link from "next/link" // Para el botón de perfil
 
 interface ConversationSidebarProps {
-  patientId: string
-  onSelectConversation: (conversationId: string) => void
-  currentConversationId?: string
+  conversations: Conversation[]
+  currentConversationId: string | null
+  onSelectConversation: (id: string) => void
+  onCreateConversation: () => void
+  onDeleteConversation: (id: string) => void
+  isLoading: boolean
 }
 
 export function ConversationSidebar({
-  patientId,
-  onSelectConversation,
+  conversations,
   currentConversationId,
+  onSelectConversation,
+  onCreateConversation,
+  onDeleteConversation,
+  isLoading,
 }: ConversationSidebarProps) {
-  const [conversations, setConversations] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
-  useEffect(() => {
-    if (patientId) loadConversations()
-  }, [patientId])
-
-  const loadConversations = async () => {
-    setIsLoading(true)
-    try {
-      const response = await fetch(`/api/conversations?patientId=${patientId}`)
-      const data = await response.json()
-      setConversations(data.sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()))
-    } catch (error) {
-      console.error("Error al cargar conversaciones:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleDeleteConversation = async (e: React.MouseEvent, conversationId: string) => {
-    e.stopPropagation()
-    if (window.confirm("¿Estás seguro de que deseas eliminar esta conversación?")) {
-      try {
-        const response = await fetch(`/api/conversations/${conversationId}`, { method: "DELETE" })
-        if (response.ok) {
-          setConversations(conversations.filter((conv) => conv.id !== conversationId))
-        }
-      } catch (error) {
-        console.error("Error al eliminar conversación:", error)
-      }
-    }
-  }
-
-  const handleCreateNewConversation = async () => {
-    try {
-      const response = await fetch("/api/conversations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId }),
-      })
-      const data = await response.json()
-      onSelectConversation(data.conversationId)
-      await loadConversations()
-    } catch (error) {
-      console.error("Error al crear nueva conversación:", error)
-    }
-  }
-
-  const getConversationSummary = (conversation: any): string => {
-    const userMessages = conversation.messages?.filter((msg: any) => msg.role === "user") || []
-    if (userMessages.length > 0) {
-      return userMessages[0].content.slice(0, 50) + (userMessages[0].content.length > 50 ? "..." : "")
-    }
-    return "Conversación sin mensajes"
+  if (!mounted) {
+    return (
+      <div className="w-full md:w-72 lg:w-80 border-r bg-muted/40 p-4 flex flex-col">
+        <div className="animate-pulse">
+          <div className="h-10 bg-muted rounded w-full mb-4"></div>
+          <div className="h-8 bg-muted rounded w-3/4 mb-2"></div>
+          <div className="h-8 bg-muted rounded w-full mb-2"></div>
+          <div className="h-8 bg-muted rounded w-5/6 mb-2"></div>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4">
-        <Button onClick={handleCreateNewConversation} className="w-full flex items-center justify-center">
-          <Plus className="h-4 w-4 mr-2" /> Nueva conversación
-        </Button>
-      </div>
+    <aside className="w-full md:w-72 lg:w-80 border-r bg-muted/40 p-4 flex flex-col">
+      <Button
+        onClick={onCreateConversation}
+        disabled={isLoading}
+        className="w-full mb-4 bg-deep-blue hover:bg-deep-blue/90 dark:bg-sky-blue dark:hover:bg-sky-blue/90"
+      >
+        <PlusCircle className="mr-2 h-5 w-5" />
+        Nueva Conversación
+      </Button>
 
-      <div className="flex-1 overflow-y-auto px-3 pb-4">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-40">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mint" />
-          </div>
-        ) : conversations.length > 0 ? (
+      {/* Botón para ir al perfil médico/onboarding */}
+      <Link href="/onboarding" passHref legacyBehavior>
+        <Button variant="outline" className="w-full mb-4">
+          <UserCircle className="mr-2 h-5 w-5" />
+          Mi Perfil Médico
+        </Button>
+      </Link>
+
+      <h2 className="text-lg font-semibold mb-2 text-foreground">Historial</h2>
+      {isLoading && conversations.length === 0 ? (
+        <div className="text-center text-muted-foreground py-4">Cargando conversaciones...</div>
+      ) : conversations.length === 0 ? (
+        <div className="text-center text-muted-foreground py-4">No hay conversaciones aún.</div>
+      ) : (
+        <ScrollArea className="flex-grow">
           <div className="space-y-2">
-            {conversations.map((conversation) => (
+            {conversations.map((conv) => (
               <div
-                key={conversation.id}
-                className={cn(
-                  "group p-3 h-[100px] rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-start shadow-sm",
-                  currentConversationId === conversation.id && "bg-mint/10 dark:bg-mint/5"
-                )}
-                onClick={() => onSelectConversation(conversation.id)}
+                key={conv.id}
+                className={`group flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors
+                  ${currentConversationId === conv.id ? "bg-primary text-primary-foreground" : "hover:bg-accent hover:text-accent-foreground"}`}
+                onClick={() => onSelectConversation(conv.id)}
               >
-                <div className="flex-shrink-0 mr-3">
-                  <div className="h-8 w-8 rounded-full bg-mint/20 dark:bg-mint/10 flex items-center justify-center">
-                    <MessageSquare className="h-4 w-4 text-mint dark:text-mint/70" />
-                  </div>
+                <div className="flex items-center truncate">
+                  <MessageSquare className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span className="truncate text-sm">
+                    {conv.title || new Date(conv.created_at).toLocaleDateString()}
+                  </span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="text-xs text-muted-foreground truncate">
-                      {format(new Date(conversation.createdAt), "d MMM, yyyy", { locale: es })}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 ml-1 opacity-0 group-hover:opacity-100 hover:opacity-100 focus:opacity-100"
-                      onClick={(e) => handleDeleteConversation(e, conversation.id)}
-                    >
-                      <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                    </Button>
-                  </div>
-                  <p className="text-sm line-clamp-2 font-medium max-h-[3.5rem] overflow-hidden">{getConversationSummary(conversation)}</p>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {conversation.messages?.length || 0} mensajes
-                  </div>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 opacity-0 group-hover:opacity-100 ${currentConversationId === conv.id ? "opacity-100" : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDeleteConversation(conv.id)
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             ))}
           </div>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
-            <p>No hay conversaciones previas</p>
-            <p className="text-xs mt-1">Inicia una nueva conversación</p>
-          </div>
-        )}
-      </div>
-    </div>
+        </ScrollArea>
+      )}
+    </aside>
   )
 }
