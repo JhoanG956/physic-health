@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server"
-import { query } from "@/lib/db" // Asumiendo que tienes una función query en db.ts
 import { getServerUser } from "@/lib/services/server-auth-service"
 import {
   getPatientProfileByUserId,
   updateFullPatientProfile,
+  createPatientProfile, // Importar createPatientProfile
+  addCondition, // Importar funciones add...
+  addMedication,
+  addExercise,
+  addAllergy,
+  addSurgery,
   type CreatePatientProfileData,
   type PatientCondition,
   type PatientMedication,
@@ -12,31 +17,20 @@ import {
   type PatientSurgery,
 } from "@/lib/services/patient-service"
 
-// GET: Obtener perfil del paciente (usando el userId del usuario autenticado o uno provisto)
+// GET: Obtener perfil del paciente
 export async function GET(request: Request) {
   try {
     const user = await getServerUser()
     if (!user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 })
     }
-
-    const url = new URL(request.url)
-    // Permitir obtener perfil de otro usuario si el actual es admin, o siempre el propio.
-    // Por ahora, simplificamos y solo permitimos obtener el perfil del usuario autenticado.
-    const userIdToFetch = user.id
-    // const userIdToFetch = url.searchParams.get("userId") || user.id; // Podrías usar esto si necesitas más flexibilidad
-
-    const patientProfile = await getPatientProfileByUserId(userIdToFetch)
-
+    const patientProfile = await getPatientProfileByUserId(user.id)
     if (!patientProfile) {
-      // Es posible que un usuario exista pero no tenga perfil médico aún.
-      // Devolvemos un objeto vacío o un estado específico para que el frontend sepa que debe crear uno.
       return NextResponse.json(
         { profile: null, message: "Perfil no encontrado, se puede crear uno nuevo." },
-        { status: 200 },
+        { status: 200 }, // Devolver 200 con profile: null para que el frontend sepa que no existe
       )
     }
-
     return NextResponse.json({ profile: patientProfile })
   } catch (error) {
     console.error("Error al obtener perfil:", error)
@@ -44,8 +38,8 @@ export async function GET(request: Request) {
   }
 }
 
-// PUT: Actualizar perfil completo del paciente
-interface UpdateProfilePayload extends CreatePatientProfileData {
+// Interfaz para el payload de creación y actualización
+interface ProfilePayload extends CreatePatientProfileData {
   conditions: PatientCondition[]
   medications: PatientMedication[]
   exercises: PatientExercise[]
@@ -53,6 +47,60 @@ interface UpdateProfilePayload extends CreatePatientProfileData {
   surgeries: PatientSurgery[]
 }
 
+// POST: Crear un nuevo perfil de paciente completo
+export async function POST(request: Request) {
+  try {
+    const user = await getServerUser()
+    if (!user) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 })
+    }
+
+    // Verificar si ya existe un perfil para este usuario
+    const existingProfile = await getPatientProfileByUserId(user.id)
+    if (existingProfile) {
+      return NextResponse.json({ error: "Ya existe un perfil para este usuario." }, { status: 409 }) // 409 Conflict
+    }
+
+    const data: ProfilePayload = await request.json()
+
+    // 1. Crear el perfil básico
+    const patientId = await createPatientProfile({
+      userId: user.id,
+      age: data.age,
+      gender: data.gender,
+      height: data.height,
+      weight: data.weight,
+      notes: data.notes,
+      goals: data.goals,
+      lastVisit: data.lastVisit,
+      nextVisit: data.nextVisit,
+    })
+
+    // 2. Añadir datos relacionados
+    for (const condition of data.conditions || []) {
+      if (condition.name.trim()) await addCondition(patientId, condition)
+    }
+    for (const medication of data.medications || []) {
+      if (medication.name.trim()) await addMedication(patientId, medication)
+    }
+    for (const exercise of data.exercises || []) {
+      if (exercise.name.trim()) await addExercise(patientId, exercise)
+    }
+    for (const allergy of data.allergies || []) {
+      if (allergy.allergen.trim()) await addAllergy(patientId, allergy)
+    }
+    for (const surgery of data.surgeries || []) {
+      if (surgery.procedure.trim()) await addSurgery(patientId, surgery)
+    }
+
+    return NextResponse.json({ success: true, message: "Perfil creado correctamente", patientId }, { status: 201 })
+  } catch (error) {
+    console.error("Error al crear perfil:", error)
+    return NextResponse.json({ error: "Error al crear perfil" }, { status: 500 })
+  }
+}
+
+// PUT: Actualizar perfil completo del paciente
 export async function PUT(request: Request) {
   try {
     const user = await getServerUser()
@@ -60,21 +108,19 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 })
     }
 
-    const data: UpdateProfilePayload = await request.json()
+    const data: ProfilePayload = await request.json()
 
-    // Obtener el patient_id basado en el user.id
-    const [existingProfileInfo] = await query(`SELECT id FROM patient_profiles WHERE user_id = $1`, [user.id])
-
-    if (!existingProfileInfo || !existingProfileInfo.id) {
+    const existingProfile = await getPatientProfileByUserId(user.id)
+    if (!existingProfile) {
       return NextResponse.json(
         { error: "Perfil no encontrado para este usuario. No se puede actualizar." },
         { status: 404 },
       )
     }
-    const patientId = existingProfileInfo.id
+    const patientId = existingProfile.id
 
     await updateFullPatientProfile(patientId, {
-      userId: user.id, // Aunque no se usa directamente en updateFullPatientProfile para la query principal, es bueno tenerlo
+      userId: user.id,
       age: data.age,
       gender: data.gender,
       height: data.height,

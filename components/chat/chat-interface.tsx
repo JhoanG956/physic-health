@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-
+import Link from "next/link" // Importar Link
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ChatInput } from "./chat-input"
@@ -10,11 +10,11 @@ import { PromptEditor } from "./prompt-editor"
 import { useChat } from "@/hooks/use-chat"
 import { AnimatePresence, motion } from "framer-motion"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, RefreshCw, Plus, Trash2, Menu, X } from "lucide-react"
+import { AlertCircle, RefreshCw, Plus, Trash2, Menu, X, UserCog } from "lucide-react" // Añadir UserCog
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-// Prompt del sistema predeterminado
+// Prompt del sistema predeterminado (sin cambios)
 const DEFAULT_SYSTEM_PROMPT = `Eres un asistente de fisioterapia profesional llamado PhysioBot. 
 Tu objetivo es ayudar a los usuarios con recomendaciones personalizadas, ejercicios y consejos relacionados con la fisioterapia.
 
@@ -72,12 +72,23 @@ export function ChatInterface() {
 
         const profileResponse = await fetch(`/api/patients/profile?userId=${userData.user.id}`)
         if (!profileResponse.ok) {
-          if (profileResponse.status === 404) return router.push("/onboarding")
-          throw new Error("Error al obtener el perfil del paciente")
+          // No lanzar error si es 404, el perfil puede no existir aún
+          if (profileResponse.status === 404) {
+            console.log("Perfil no encontrado, se puede crear uno nuevo.")
+            setPatientProfile(null) // Asegurarse que patientProfile es null
+          } else {
+            throw new Error("Error al obtener el perfil del paciente")
+          }
+        } else {
+          const profileData = await profileResponse.json()
+          if (profileData.profile) {
+            // Verificar si profile existe en la respuesta
+            setPatientProfile(profileData.profile)
+          } else {
+            console.log("Perfil no encontrado (profileData.profile es null), se puede crear uno nuevo.")
+            setPatientProfile(null)
+          }
         }
-
-        const profileData = await profileResponse.json()
-        setPatientProfile(profileData.profile)
       } catch (error: any) {
         setError(error.message)
       } finally {
@@ -89,12 +100,18 @@ export function ChatInterface() {
   }, [router])
 
   useEffect(() => {
-    if (patientProfile) {
+    // Cargar conversaciones solo si hay un perfil de paciente Y el usuario actual está definido
+    if (patientProfile && currentUser) {
       loadConversations()
     }
-  }, [patientProfile])
+  }, [patientProfile, currentUser]) // Añadir currentUser como dependencia
 
   const loadConversations = async () => {
+    if (!patientProfile || !patientProfile.id) {
+      // Asegurarse que patientProfile.id existe
+      console.log("No se puede cargar conversaciones: patientProfile o patientProfile.id no está definido.")
+      return
+    }
     setIsLoadingConversations(true)
     try {
       const response = await fetch(`/api/conversations?patientId=${patientProfile.id}`)
@@ -103,15 +120,20 @@ export function ChatInterface() {
       const conversationsData = Array.isArray(data) ? data : data.conversations || []
 
       const grouped = conversationsData.reduce((acc: any[], conv: any) => {
-        const { message_id, content, message_created_at, ...rest } = conv
+        const { message_id, content, message_created_at, role, ...rest } = conv // Incluir 'role'
         const existing = acc.find((c) => c.id === rest.id)
         if (existing) {
-          existing.messages.push({ message_id, content, created_at: message_created_at })
+          existing.messages.push({ message_id, content, created_at: message_created_at, role })
         } else {
-          acc.push({ ...rest, messages: [{ message_id, content, created_at: message_created_at }] })
+          acc.push({ ...rest, messages: [{ message_id, content, created_at: message_created_at, role }] })
         }
         return acc
       }, [])
+
+      // Ordenar mensajes dentro de cada conversación por fecha
+      grouped.forEach((conv) => {
+        conv.messages.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      })
 
       setConversations(grouped)
     } catch (error) {
@@ -122,10 +144,24 @@ export function ChatInterface() {
   }
 
   const handleSendMessage = async (content: string) => {
-    if (!patientProfile) return
+    if (!patientProfile && !currentUser) {
+      setError("No se ha podido cargar tu perfil o información de usuario. Intenta recargar la página.")
+      return
+    }
+
+    let currentConversationId = conversationId
+
+    // Si no hay perfil de paciente, el usuario debe ir a onboarding primero.
+    // Esta lógica podría necesitar ajuste si permites chatear sin perfil completo.
+    if (!patientProfile) {
+      router.push("/onboarding")
+      // O mostrar un mensaje para completar el perfil
+      // setError("Por favor, completa tu perfil médico para comenzar a chatear.");
+      return
+    }
 
     // Si no hay conversación activa, crea una nueva con título generado
-    if (!conversationId) {
+    if (!currentConversationId) {
       const initialTitle = content.slice(0, 40) + (content.length > 40 ? "..." : "")
       try {
         const res = await fetch("/api/conversations", {
@@ -136,14 +172,20 @@ export function ChatInterface() {
         if (!res.ok) throw new Error("Error al crear nueva conversación")
         const data = await res.json()
         setConversationId(data.conversationId)
-        await loadConversations()
+        currentConversationId = data.conversationId // Actualizar para el envío del mensaje
+        await loadConversations() // Recargar lista de conversaciones
       } catch (err) {
         console.error(err)
+        setError("No se pudo crear una nueva conversación.")
         return
       }
     }
-
-    sendMessage(content, customPrompt)
+    // Asegurarse que currentConversationId está definido antes de enviar el mensaje
+    if (currentConversationId) {
+      sendMessage(content, customPrompt, currentConversationId) // Pasar el ID de la conversación
+    } else {
+      setError("Error: ID de conversación no definido para enviar mensaje.")
+    }
   }
 
   const handleSavePrompt = (newPrompt: string) => setCustomPrompt(newPrompt)
@@ -155,13 +197,17 @@ export function ChatInterface() {
 
   const handleRetry = () => {
     const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")
-    if (lastUserMessage && patientProfile) {
-      sendMessage(lastUserMessage.content, customPrompt)
+    if (lastUserMessage && patientProfile && conversationId) {
+      // Asegurar que conversationId existe
+      sendMessage(lastUserMessage.content, customPrompt, conversationId)
     }
   }
 
   const handleCreateNewConversation = async () => {
-    if (!patientProfile) return
+    if (!patientProfile) {
+      router.push("/onboarding") // O mostrar mensaje
+      return
+    }
     try {
       const res = await fetch("/api/conversations", {
         method: "POST",
@@ -171,9 +217,10 @@ export function ChatInterface() {
       if (!res.ok) throw new Error("Error al crear nueva conversación")
       const data = await res.json()
       setConversationId(data.conversationId)
-      loadConversations()
+      loadConversations() // Recargar lista
     } catch (err) {
       console.error(err)
+      setError("No se pudo crear una nueva conversación.")
     }
   }
 
@@ -184,10 +231,13 @@ export function ChatInterface() {
         const res = await fetch(`/api/conversations/${id}`, { method: "DELETE" })
         if (res.ok) {
           setConversations(conversations.filter((c) => c.id !== id))
-          if (conversationId === id) setConversationId(undefined)
+          if (conversationId === id) setConversationId(undefined) // Limpiar ID si se borra la activa
+        } else {
+          throw new Error("Error al eliminar conversación desde el servidor")
         }
       } catch (err) {
         console.error(err)
+        setError("No se pudo eliminar la conversación.")
       }
     }
   }
@@ -195,9 +245,12 @@ export function ChatInterface() {
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
 
   const getConversationTitle = (c: any): string => {
-    if (c.title) return c.title
-    const userMessages = c.messages?.filter((m: any) => m.role === "user") || []
-    return userMessages[0]?.content?.slice(0, 30) + "..." || "Nueva conversación"
+    if (c.title && c.title !== "Nueva conversación") return c.title
+    // Buscar el primer mensaje del usuario para generar un título si no hay uno explícito
+    const firstUserMessage = c.messages?.find((m: any) => m.role === "user")
+    return (
+      firstUserMessage?.content?.slice(0, 30) + (firstUserMessage?.content?.length > 30 ? "..." : "") || "Conversación"
+    )
   }
 
   if (isLoading) {
@@ -216,7 +269,7 @@ export function ChatInterface() {
       <div className="flex items-center justify-center h-[70vh] bg-white/70 dark:bg-slate-900/60 rounded-2xl border shadow-xl backdrop-blur-md">
         <div className="text-center max-w-md px-4">
           <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-          <h3 className="text-lg font-medium mb-2">Error al cargar tu perfil</h3>
+          <h3 className="text-lg font-medium mb-2">Error</h3>
           <p className="text-muted-foreground mb-4">{error}</p>
           <Button onClick={() => router.refresh()}>Intentar de nuevo</Button>
         </div>
@@ -243,9 +296,14 @@ export function ChatInterface() {
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <Button onClick={handleCreateNewConversation} className="mb-4">
+            <Button onClick={handleCreateNewConversation} className="mb-2">
               <Plus className="h-4 w-4 mr-2" /> Nueva conversación
             </Button>
+            <Link href="/onboarding" passHref legacyBehavior>
+              <Button variant="outline" className="w-full mb-4">
+                <UserCog className="h-4 w-4 mr-2" /> Mi Perfil Médico
+              </Button>
+            </Link>
             <ScrollArea className="flex-1 pr-1">
               {isLoadingConversations ? (
                 <div className="text-center py-8 text-muted-foreground">Cargando...</div>
@@ -254,7 +312,7 @@ export function ChatInterface() {
                   <div
                     key={conv.id}
                     onClick={() => handleSelectConversation(conv.id)}
-                    className="p-4 mb-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow cursor-pointer group min-h-[90px] flex flex-col gap-1 justify-between"
+                    className={`p-4 mb-3 rounded-xl border shadow-sm hover:shadow-md transition-shadow cursor-pointer group min-h-[90px] flex flex-col gap-1 justify-between ${conversationId === conv.id ? "bg-mint/20 dark:bg-mint/30 border-mint" : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"}`}
                   >
                     <div className="flex justify-between items-center mb-2">
                       <h3 className="text-sm font-semibold text-slate-800 dark:text-white line-clamp-2 leading-snug">
@@ -285,7 +343,6 @@ export function ChatInterface() {
       {/* MAIN CHAT AREA */}
       <div className="flex-1 flex flex-col">
         <div className="flex justify-between items-center p-4 border-b bg-white/80 dark:bg-slate-800/80 backdrop-blur relative">
-          {/* Botón de toggle para desktop - CUANDO SIDEBAR ESTÁ CERRADO */}
           {!sidebarOpen && (
             <Button variant="ghost" size="icon" onClick={toggleSidebar} className="mr-2" aria-label="Abrir sidebar">
               <Menu className="h-4 w-4" />
@@ -328,7 +385,7 @@ export function ChatInterface() {
           </AnimatePresence>
         </div>
 
-        <ChatInput onSend={handleSendMessage} isLoading={isChatLoading} />
+        <ChatInput onSend={handleSendMessage} isLoading={isChatLoading || isLoading} />
       </div>
     </motion.div>
   )
