@@ -25,7 +25,7 @@ export const db = drizzle(sql)
 // Función para ejecutar consultas SQL directamente
 export async function query(text: string, params: any[] = []) {
   try {
-    const result = await sql(text, params)
+    const result = await sql.query(text, params)
     return result
   } catch (error) {
     console.error("Error ejecutando consulta SQL:", error)
