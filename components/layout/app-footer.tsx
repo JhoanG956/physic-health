@@ -20,7 +20,7 @@ export default function AppFooter() {
             </Link>
           </div>
           <p className="text-sm flex items-center">
-            Hecho con <Heart className="w-4 h-4 mx-1 text-soft-coral" /> por tu equipo de Physio Health.
+            Hecho con <Heart className="w-4 h-4 mx-1 text-soft-coral" /> por Gallego AI
           </p>
         </div>
       </div>
