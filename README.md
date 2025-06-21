@@ -110,12 +110,6 @@ El proyecto está listo para desplegarse en **Vercel**:
 
 ---
 
-## 🤝 Contribuciones
-
-¿Quieres colaborar? Haz un fork del repositorio, crea una rama con tus cambios y abre un pull request. Toda ayuda es bienvenida para mejorar este proyecto 🚀
-
----
-
 ## 📄 Licencia
 
 Este proyecto está bajo la licencia MIT. Puedes usarlo libremente respetando las condiciones de atribución.
