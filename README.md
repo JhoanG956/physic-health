@@ -22,5 +22,5 @@
 1. **Clonar el repositorio:**
 
 ```bash
-git clone https://github.com/tu-usuario/physio-health.git
+git clone https://github.com/JhoanG956/physio-health.git
 cd physio-health
